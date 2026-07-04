@@ -38,7 +38,10 @@ jobs:
 
       - name: Build Application
         run: |
-          env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 ${{ inputs.gobuildcommand }}
+          env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 
+          go mod tidy
+          go clean -cache
+          ${{ inputs.gobuildcommand }}
 
       - name: Upload Workspace Artifact
         uses: actions/upload-artifact@v4
