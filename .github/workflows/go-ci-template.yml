@@ -1,0 +1,94 @@
+name: Shared Go CI Template
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        type: string
+        required: false
+        default: '1.25'
+      golangci-lint-version:
+        type: string
+        required: false
+        default: 'v1.59'
+
+jobs:
+  # ==========================================
+  # STAGE 1: BUILD
+  # ==========================================
+  build:
+    name: Build Stage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build Application
+        run: |
+          env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o my-go-app main.go
+
+      - name: Upload Workspace Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-workspace
+          path: .
+          retention-days: 1
+
+  # ==========================================
+  # STAGE 2: STATIC ANALYSIS (SA) - GOLANGCI-LINT
+  # ==========================================
+  static-analysis:
+    name: golangci-lint SA Stage
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Workspace Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: project-workspace
+          path: .
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+          args: --timeout=5m
+          skip-cache: true # Uses the actions/setup-go cache instead to avoid conflicts
+
+  # ==========================================
+  # STAGE 3: UNIT TEST (UT)
+  # ==========================================
+  unit-test:
+    name: Unit Test Stage
+    runs-on: ubuntu-latest
+    needs: static-analysis
+    steps:
+      - name: Download Workspace Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: project-workspace
+          path: .
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+
+      - name: Run Unit Tests
+        run: |
+          go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
