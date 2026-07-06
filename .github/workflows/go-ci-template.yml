@@ -51,9 +51,16 @@ jobs:
           env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 
           go mod tidy
           go clean -cache
+          
+          echo "Executing: ${{ inputs.gobuildcommand }}"
+          # Run the build command. If it fails, the script exits immediately here.
           ${{ inputs.gobuildcommand }}
+          
+          echo "✅ Go build completed successfully!"
 
       - name: Upload Clean Workspace Artifact
+        # This ensuring we ONLY upload the artifact if the build step didn't fail
+        if: ${{ success() }} 
         uses: actions/upload-artifact@v4
         with:
           name: project-workspace
@@ -80,9 +87,9 @@ jobs:
           docker run \
             --rm \
             -v "${{ github.workspace }}:/usr/src" \
-            sonarsource/sonar-scanner-cli \
-            -Dsonar.host.url="${{ vars.SONAR_HOST_URL }}" \
-            -Dsonar.token="${{ secrets.SONAR_TOKEN }}"
+            -e SONAR_HOST_URL="${{ vars.SONAR_HOST_URL }}" \
+            -e SONAR_TOKEN="${{ secrets.SONAR_TOKEN }}" \
+            sonarsource/sonar-scanner-cli
 
   # ==========================================
   # STAGE 3: UNIT TEST (UT)
