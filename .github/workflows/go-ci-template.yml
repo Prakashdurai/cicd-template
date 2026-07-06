@@ -7,14 +7,23 @@ on:
         type: string
         required: false
         default: '1.25'
-      golangci-lint-version:
-        type: string
-        required: false
-        default: 'v1.59'
       gobuildcommand:
         type: string
         required: false
         default: 'go build -ldflags="-s -w" -o my-go-app main.go'
+      # ADD TOGGLES FOR ALL THREE STAGES
+      run-build:
+        type: boolean
+        required: false
+        default: true
+      run-sa:
+        type: boolean
+        required: false
+        default: true
+      run-ut:
+        type: boolean
+        required: false
+        default: true
 
 jobs:
   # ==========================================
@@ -23,6 +32,7 @@ jobs:
   build:
     name: Build Stage
     runs-on: ubuntu-latest
+    if: ${{ inputs.run-build }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -51,31 +61,35 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # STAGE 2: STATIC ANALYSIS (SA) - GOLANGCI-LINT
+  # STAGE 2: STATIC ANALYSIS (SA)
   # ==========================================
   static-analysis:
-    name: golangci-lint SA Stage
+    name: SonarQube CLI SA Stage
     runs-on: ubuntu-latest
-    needs: build
+    # Removed "needs: build" so it can run independently if build is skipped
+    if: ${{ inputs.run-sa }}
     steps:
+      # Step A: If build ran, download the compiled workspace artifact
       - name: Download Workspace Artifact
+        if: ${{ inputs.run-build }}
         uses: actions/download-artifact@v4
         with:
           name: project-workspace
           path: .
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ inputs.go-version }}
-          cache: true
+      # Step B: If build was skipped, checkout the raw codebase instead
+      - name: Checkout code (Fallback)
+        if: ${{ !inputs.run-build }}
+        uses: actions/checkout@v4
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: ${{ inputs.golangci-lint-version }}
-          args: --timeout=5m
-          skip-cache: true # Uses the actions/setup-go cache instead to avoid conflicts
+      - name: Run SonarScanner CLI
+        run: |
+          docker run \
+            --rm \
+            -v "${{ github.workspace }}:/usr/src" \
+            sonarsource/sonar-scanner-cli \
+            -Dsonar.host.url="${{ vars.SONAR_HOST_URL }}" \
+            -Dsonar.token="${{ secrets.SONAR_TOKEN }}"
 
   # ==========================================
   # STAGE 3: UNIT TEST (UT)
@@ -83,13 +97,18 @@ jobs:
   unit-test:
     name: Unit Test Stage
     runs-on: ubuntu-latest
-    needs: build
+    if: ${{ inputs.run-ut }}
     steps:
       - name: Download Workspace Artifact
+        if: ${{ inputs.run-build }}
         uses: actions/download-artifact@v4
         with:
           name: project-workspace
           path: .
+
+      - name: Checkout code (Fallback)
+        if: ${{ !inputs.run-build }}
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
