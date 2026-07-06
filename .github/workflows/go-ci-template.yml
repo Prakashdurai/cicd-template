@@ -82,13 +82,27 @@ jobs:
           name: project-workspace
           path: .
 
+      - name: Debug Sonar Variable Presence
+        run: |
+          if [ -z "${{ vars.SONAR_HOST_URL }}" ]; then
+            echo "❌ ERROR: vars.SONAR_HOST_URL is completely EMPTY!"
+            exit 1
+          else
+            echo "✅ Variable is present."
+          fi
+          
       - name: Run SonarScanner CLI
+        # 1. Map the contexts to the step's environment block
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # 2. Inject those envs directly into the docker runtime via standard shell variables
         run: |
           docker run \
             --rm \
             -v "${{ github.workspace }}:/usr/src" \
-            -e SONAR_HOST_URL="${{ vars.SONAR_HOST_URL }}" \
-            -e SONAR_TOKEN="${{ secrets.SONAR_TOKEN }}" \
+            -e SONAR_HOST_URL="$SONAR_HOST_URL" \
+            -e SONAR_TOKEN="$SONAR_TOKEN" \
             sonarsource/sonar-scanner-cli
 
   # ==========================================
